@@ -1,0 +1,737 @@
+---
+title: '`r params$proj`'
+title-block-banner: "#E5C494"
+title-block-banner-color: "black"
+author: '`r params$authors`'
+date: "`r params$date`"
+published-title: "DATA COLLECTED"
+date-format: "YYYY"
+format:
+  html:
+    embed-resources: true
+    code-background: true
+editor: visual
+theme: default
+toc: true
+toc-depth: 4
+toc-expand: 4
+toc-location: left
+params:
+  proj: '`r params$proj`'
+  authors: '`r params$authors`'
+  date: '`r params$date`'
+---
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning = FALSE}
+proj = "PK01"
+proj <- params$proj
+#| echo: false
+      library(knitr)
+      library(kableExtra)
+      library(readxl)
+      library(readr)
+      library(tidyverse)
+      library(DT)
+
+print(proj)
+path = gsub("/code/Quarto", "", getwd(), fixed = TRUE)
+
+filename <- paste0(proj, '_info.html')
+
+# Define file paths
+pbids <- file.path(path, "bids")
+pathdata <- file.path(path, "rawdata", proj)
+ppdata <- file.path(path, "projectdata", proj)
+pq <- file.path(path, "resources")
+pscr <- file.path(path, "code")
+pderivatives <- file.path(path, "bids", proj, "derivatives", fsep = "/")
+prawdata = file.path(path,"bids", proj, "rawdata", fsep="/")
+
+#load project info
+setwd(ppdata)
+
+info = read_excel(paste0(proj, "_info.xlsx"))[-1, ]
+
+          Q=info[["Q"]][!is.na(info[["Q"]])]
+          projdes=info[["projdes"]][!is.na(info[["projdes"]])]
+          auth=info[["auth"]][!is.na(info[["auth"]])]
+          readme=info[["readme"]][!is.na(info[["readme"]])]
+          
+#load data
+setwd(file.path(pderivatives, "data_all_cases"))          
+output = readr::read_csv(paste0(proj, ".csv"))
+output_filtered = readr::read_csv(paste0(proj, "_filtered.csv"))
+output_raw = readr::read_csv(paste0(proj, "_raw.csv"))
+
+setwd(file.path(path, "bids", proj, "rawdata"))
+
+tsv_all <- list.files(pattern = "_beh.tsv$", recursive = TRUE, full.names = TRUE)
+tsv_all <- tsv_all[!tsv_all == "participants.tsv"]
+tsv_all = sub(".*_task", "_task", tsv_all)
+tsv_all = sub("_beh.tsv", "", tsv_all)
+tsv_all = sub("_task-", "", tsv_all)
+tsv_all <- tsv_all[!tsv_all == "demographics"]
+unique = unique(tsv_all)
+unique = toupper(unique)
+
+# getting the amount of unique folders per participant
+for (a in output$participant_id) {
+  folder_names <- list.dirs(file.path(path, "bids", proj, "rawdata", a), full.names = FALSE, recursive = FALSE)
+      if(a == output$participant_id[[1]]){folders_unique = folder_names
+          }  else {
+          folders_unique = c(folders_unique, folder_names)
+          }
+  }
+folders_unique = unique(folders_unique)
+folders_unique_t = folders_unique
+folders_unique_t <- gsub("ses-0", "Prescreening", folders_unique_t)
+folders_unique <- setdiff(folders_unique, "beh")
+folders_unique <- folders_unique[!grepl("ses-0", folders_unique)]
+
+#getting the total files per participant
+{# Step 1: List all subfolders
+setwd(prawdata)
+subfolders <- list.dirs(prawdata, full.names = TRUE, recursive = FALSE)
+subfolders <- subfolders[grep("sub", subfolders)]
+
+# Function to count .tsv files in a folder and its subfolders
+count_tsv_files <- function(directory) {
+  # List all files in the directory and its subdirectories
+  all_files <- list.files(directory, recursive = TRUE, full.names = TRUE)
+  
+  # Filter files to keep only .tsv files
+  tsv_files <- all_files[grep("\\.tsv$", all_files, ignore.case = TRUE)]
+  
+  # Count the number of .tsv files
+  num_tsv_files <- length(tsv_files)
+  
+  return(num_tsv_files)
+}
+
+# Step 2-5: Iterate through subfolders, count files, find maximum count
+max_file_count <- 0
+for (subfolder in subfolders) {
+  file_count <- count_tsv_files(subfolder)
+  if (file_count > max_file_count) {
+    max_file_count <- file_count
+  }
+}}
+
+total_pfiles = max_file_count
+
+#Checking which participants have all files
+incomplete = 0
+incomplete_name = vector()
+for (c in output$participant_id) {
+    if(dir.exists(file.path(path, "bids", proj, "rawdata", c))){
+        setwd(file.path(path, "bids", proj, "rawdata", c))
+        tsv_files <- list.files(pattern = "_beh.tsv$", recursive = TRUE, full.names = TRUE)
+        
+        if(total_pfiles!=length(tsv_files)){
+            incomplete = incomplete + 1 
+            incomplete_name = c(incomplete_name,c)}
+    }else{
+        incomplete = incomplete + 1 
+        incomplete_name = c(incomplete_name,c)}
+  }
+complete = nrow(output)-incomplete
+output_complete <- output[!output$participant_id %in% incomplete_name, ]
+output_filtered_complete <- output_filtered[!output_filtered$participant_id %in% incomplete_name, ]
+output_raw_complete <- output_raw[!output_raw$participant_id %in% incomplete_name, ]
+output_raw_incomplete <- output_raw[output_raw$participant_id %in% incomplete_name, ]
+
+#Create folder for complete cases and fill it with .csv files
+setwd(pderivatives)
+dir.create("data_only_complete_cases")
+setwd(file.path(pderivatives, "data_only_complete_cases"))   
+write.csv(output_complete, paste(proj, "_complete.csv"), row.names = FALSE, na = "")
+write.csv(output_raw_complete, paste(proj, "_raw_complete.csv"), row.names = FALSE, na = "")
+write.csv(output_filtered_complete, paste(proj, "_filtered_complete.csv"), row.names = FALSE, na = "")
+
+#Create folder for incomplete cases and fill it with .csv file
+if(nrow(output_raw_incomplete)>0){
+setwd(pderivatives)
+dir.create("data_only_incomplete_cases")
+setwd(file.path(pderivatives, "data_only_incomplete_cases"))   
+write.csv(output_raw_incomplete, paste(proj, "_raw_incomplete.csv"), row.names = FALSE, na = "")}
+
+# Initialize an empty dataframe
+qtable <- data.frame(Questionnaire = character(), Construct = character(), stringsAsFactors = FALSE)
+
+# Iterate through each value of Q
+for (k in Q) {
+  # Set working directory
+   if (file.exists(file.path(ppdata, paste0(k, ".xlsx")))) {   
+                  setwd(ppdata)
+            
+          } else if (file.exists(file.path(pq, paste0(k, ".xlsx")))) {
+            
+                # Check if the file exists in pq if not found in ppdata
+                  setwd(pq)
+          } else {
+            
+                stop(paste("Data for the questionnaire", Qb, "does not exist"))
+          }
+  
+  # Read the Excel file
+  quest <- read_excel(paste0(k, ".xlsx"))[-1, ]
+  
+  # Create a new row for the qtable dataframe
+  new_row <- data.frame(Questionnaire = k, Construct = quest[1, "construct"], stringsAsFactors = FALSE)
+  
+  # Bind the new row to the qtable dataframe
+  qtable <- rbind(qtable, new_row)
+}
+```
+
+## Project description
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+cat(projdes)
+```
+
+## Dataset description
+
+### Participants
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+cat(("This project includes data from"), nrow(output), "subjects,",complete, "of which are complete.")
+```
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+if(length(folders_unique_t)>1){
+cat("### Sessions\n")
+cat("This Project includes", length(folders_unique_t), "sessions, which are", paste(folders_unique_t[-length(folders_unique_t)], collapse = ", "), "and", paste(folders_unique_t[length(folders_unique_t)], ".\n", sep = ""))
+}
+
+```
+
+### Questionnaires
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+cat("The participants filled out", length(Q), "Questionnaires, which are:", "\n" #,paste(Q[-length(Q)], collapse = ", "), "and", paste(Q[length(Q)], ".\n", sep = "")
+    )
+cat(kable(qtable, booktabs = TRUE) %>% kable_styling(latex_options = "hold_position", font_size = 12))
+```
+
+### Age and Gender for complete cases
+
+```{r,message = FALSE}
+#| echo: false
+myPalette <- RColorBrewer::brewer.pal(8, "Set2")
+gender_table <- table(output_complete$sex)
+pie(gender_table, 
+    main = "Distribution of Gender", 
+    border = "white", 
+    col = myPalette,
+    labels = NA)  # We'll add labels separately
+
+# Add labels as legend
+legend("right", 
+       legend = paste(names(gender_table), ": ", gender_table), 
+       fill = myPalette, 
+       title = "Gender Frequency", 
+       cex = 0.8)
+
+
+output$age = as.integer(output$age)
+if(max(output$age, na.rm = TRUE)>65){age = 100}else{age = 70}
+
+
+# Layout to split the screen
+layout(mat = matrix(c(1,2),2,1, byrow=TRUE),  height = c(1,8))
+ 
+# Draw the boxplot and the histogram
+par(mar=c(0, 3.1, 1.1, 2.1))
+boxplot(output_complete$age , horizontal=TRUE , ylim=c(0,age), xaxt="n" , col="#8DA0CB" , frame=F, main = "Distribution of age")
+par(mar=c(4, 3.1, 1.1, 2.1))
+# Calculate the range of age values
+age_range <- range(output_complete$age, na.rm = TRUE)
+
+# Calculate the breaks
+breaks <- seq(age_range[1], age_range[2]+1, 2)
+
+# Plot histogram with specified breaks
+hist(output_complete$age,
+     breaks = breaks,
+     col = "#8DA0CB",
+     border = FALSE,
+     main = "",
+     ylab = "Frequency",
+     xlab = "Age",
+     xlim = c(0, age))
+
+```
+
+## Missing data
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+# Missing Questionnaires
+if(length(Q)!=length(unique)){
+cat("### Missing Questionnaires:\n") 
+missingQ <- Q[!Q %in% unique]
+cat("Data for",missingQ,"is missing fol all subjects!")
+}
+```
+
+### Dataset with only complete cases
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+
+
+output_raw_completeB = output_raw_complete
+setwd(ppdata) 
+quest = read_excel(paste0(proj, ".xlsx"))[-1, ]
+optional <- quest %>%
+  filter(!is.na(opt) & opt != "") %>%
+  distinct(Itemname) %>%
+  pull(Itemname)
+
+if(length(optional)>0){
+output_raw_completeB <- select(output_raw_completeB,-matches(optional))}
+
+
+
+for (g in Q) {
+setwd(pq)
+# Set working directory
+   if (file.exists(file.path(ppdata, paste0(g, ".xlsx")))) {   
+                  setwd(ppdata)
+            
+          } else if (file.exists(file.path(pq, paste0(g, ".xlsx")))) {
+            
+                # Check if the file exists in pq if not found in ppdata
+                  setwd(pq)
+          } else {
+            
+                stop(paste("Data for the questionnaire", Qb, "does not exist"))
+          }
+quest = read_excel(paste0(g, ".xlsx"))[-1, ]
+optional <- quest %>%
+  filter(!is.na(opt) & opt != "") %>%
+  distinct(Itemname) %>%
+  pull(Itemname)
+
+if(length(optional)>0){
+output_raw_completeB <- select(output_raw_completeB,-matches(optional))
+}
+}
+
+
+
+na_positions <- which(is.na(output_raw_completeB[,-1]), arr.ind = TRUE)
+na_cells <- data.frame(
+  participant = output_raw_completeB$participant_id[na_positions[, 1]],
+  column = colnames(output_raw_completeB)[-1][na_positions[, 2]]
+)
+
+if (nrow(na_cells) > 0) {
+  cat("#### Missing cells:\n")
+  na_cells <- na_cells %>%
+    arrange(participant)
+  
+  datatable(na_cells, 
+            options = list(
+              searching = TRUE,  # Enable searching/filtering
+              paging = TRUE  # Enable paging
+            )
+  )
+} else {
+  cat("There are no missing cells. \n")
+}
+```
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+
+
+if(length(folders_unique)>1){
+missing_questionnaires <- data.frame(participant = character(),session = character(), missing = character(), stringsAsFactors = FALSE)  
+}else{
+missing_questionnaires <- data.frame(participant = character(), missing = character(), stringsAsFactors = FALSE)}
+
+
+for (e in folders_unique) {
+    nr = 0
+    for (d in output$participant_id) {
+        if(dir.exists(file.path(path, "bids", proj, "rawdata", d, e))){
+            setwd(file.path(path, "bids", proj, "rawdata", d, e))
+            tsv_files <- list.files(pattern = "_beh.tsv$", recursive = TRUE, full.names = TRUE)
+            if(length(tsv_files)>nr){
+                tsv_files = sub(".*_task", "_task", tsv_files)
+                tsv_files = sub("_beh.tsv", "", tsv_files)
+                tsv_files = sub("_task-", "", tsv_files)
+                q_f = tsv_files
+                nr = length(tsv_files)
+            }
+        }
+    }
+
+    for (d in output$participant_id) {
+        if(dir.exists(file.path(path, "bids", proj, "rawdata", d, e))){
+            setwd(file.path(path, "bids", proj, "rawdata", d, e))
+            tsv_files <- list.files(pattern = "_beh.tsv$", recursive = TRUE, full.names = TRUE)
+            tsv_files = sub(".*_task", "_task", tsv_files)
+            tsv_files = sub("_beh.tsv", "", tsv_files)
+            tsv_files = sub("_task-", "", tsv_files)
+            if(length(q_f) != length(tsv_files)){
+                missingq_f <- q_f[!q_f %in% tsv_files]
+                missingq_f = toupper(missingq_f)
+                    for (f in missingq_f) {
+                        if(length(folders_unique)>1){
+                              missing_questionnaires <- rbind(missing_questionnaires, data.frame(participant = d, session = e, missing = f))
+                        }else{
+                              missing_questionnaires <- rbind(missing_questionnaires, data.frame(participant = d, missing = f))
+                        }
+                    }
+            }
+        }
+    }
+}
+
+
+if((length(folders_unique)>1 & incomplete != 0)|(nrow(missing_questionnaires)>0)){cat("### Dataset including incomplete cases:\n")}
+
+
+if(length(folders_unique)>1 & incomplete != 0){
+  
+cat("#### Missing sessions:\n")  
+# checking if participant has all folders
+
+# Iterate over participant IDs
+    # Initialize an empty data frame to store missing folders information
+        missing_folders <- data.frame(participant = character(), missing = character(), stringsAsFactors = FALSE)
+        missing_folderst1 <- data.frame(participant = character(), missing = character(), stringsAsFactors = FALSE)
+        missing_folderst2 <- data.frame(participant = character(), missing = character(), stringsAsFactors = FALSE)
+    # Iterate over participant IDs
+        for (a in output$participant_id) {
+            folder_path <- file.path(path, "bids", proj, "rawdata", a)
+            folder_names <- list.dirs(folder_path, full.names = FALSE, recursive = FALSE)
+    # check if there is a folder for the subject
+          if (dir.exists(folder_path)) {
+        # check if there is more than the ses-0 folder
+            subfolders <- list.dirs(folder_path, recursive = FALSE, full.names = FALSE)
+            if (length(subfolders) > 1 || !("ses-0" %in% subfolders)){
+            setwd(folder_path)
+  
+        # Iterate over the unique folders you want to check
+            for (b in folders_unique) {
+                # Check if the folder b does not exist
+                    if (!dir.exists(b)==TRUE) {
+                    # Append a row to the missing_folders data frame
+                    missing_folders <- rbind(missing_folders, data.frame(participant = a, missing = b))
+                    missing_folderst1 <- rbind(missing_folderst1, data.frame(participant = a, missing = b))
+                    }
+            }
+          
+          }else{
+            for (b in folders_unique) {
+                # Append a row to the missing_folders data frame
+                    missing_folders <- rbind(missing_folders, data.frame(participant = a, missing = b))
+                    
+            } 
+            missing_folderst2 <- rbind(missing_folderst2, data.frame(participant = a, missing = "all sessions"))          
+          }
+          }else{
+            for (b in folders_unique) {
+                # Append a row to the missing_folders data frame
+                    missing_folders <- rbind(missing_folders, data.frame(participant = a, missing = b))
+                    
+            } 
+            missing_folderst2 <- rbind(missing_folderst2, data.frame(participant = a, missing = "all sessions"))          
+          }
+        }
+
+
+datatable(missing_folderst1, 
+            options = list(
+              searching = TRUE,  
+              paging = TRUE  
+            ))
+
+}
+
+l_folders_unique = length(folders_unique)
+if(l_folders_unique>1 & incomplete != 0){
+if(nrow(missing_folderst2)>0){
+cat("##### All sessions missing:\n")  
+datatable(missing_folderst2, 
+            options = list(
+              searching = TRUE, 
+              paging = TRUE 
+            ))
+}}
+
+if(nrow(missing_questionnaires)>0){   
+cat("#### Missing questionnaires:\n") 
+datatable(missing_questionnaires, 
+            options = list(
+              searching = TRUE,  
+              paging = TRUE  
+            ))
+}
+
+
+```
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+
+output_raw_incompleteB = output_raw_incomplete
+setwd(ppdata) 
+quest = read_excel(paste0(proj, ".xlsx"))[-1, ]
+optional <- quest %>%
+  filter(!is.na(opt) & opt != "") %>%
+  distinct(Itemname) %>%
+  pull(Itemname)
+
+if(length(optional)>0){
+output_raw_incompleteB <- select(output_raw_incompleteB,-matches(optional))}
+
+
+na_positions_inc <- which(is.na(output_raw_incompleteB[,-1]), arr.ind = TRUE)
+na_cells_inc <- data.frame(
+  participant = output_raw_incompleteB$participant_id[na_positions_inc[, 1]],
+  column = colnames(output_raw_incompleteB)[-1][na_positions_inc[, 2]])
+
+if(length(folders_unique)>1 & exists("missing_folders")){
+if(nrow(missing_folders>0)){
+  for (i in 1:nrow(missing_folders)) {
+  
+elim = na_cells_inc %>%
+  filter(participant %in% missing_folders$participant[i]) %>%
+  filter(grepl(missing_folders$missing[i], column))
+
+na_cells_inc <- anti_join(na_cells_inc, elim, 
+                    by = c("participant", "column"))
+}}}
+
+if(nrow(missing_questionnaires)>0){
+if(length(folders_unique)>1 & exists("missing_folders")){
+for (j in 1:nrow(missing_questionnaires)) {
+  
+elim = na_cells_inc %>%
+  filter(participant %in% missing_questionnaires$participant[j]) %>%
+  filter(grepl(missing_questionnaires$session[j], column)) %>%
+  filter(grepl(paste0("(^|[^A-Za-z])",missing_questionnaires$missing[j],"(?:_?-?[?\\d+\\[?\\d*\\]?)([^A-Za-z]|$)"), column))
+
+na_cells_inc <- anti_join(na_cells_inc, elim, 
+                    by = c("participant", "column"))
+}}else{
+for (j in 1:nrow(missing_questionnaires)) {
+  
+elim = na_cells_inc %>%
+  filter(participant %in% missing_questionnaires$participant[j]) %>%
+   filter(grepl(paste0("(^|[^A-Za-z])",missing_questionnaires$missing[j],"(?:_?-?[?\\d+\\[?\\d*\\]?)([^A-Za-z]|$)"), column))
+
+na_cells_inc <- anti_join(na_cells_inc, elim, 
+                    by = c("participant", "column"))
+}}}
+
+
+
+
+if(nrow(na_cells_inc)>0){
+cat("#### Missing cells:\n")
+na_cells_inc = na_cells_inc %>%
+               arrange(participant)
+
+datatable(na_cells_inc, 
+            options = list(
+              searching = TRUE,  # Enable searching/filtering
+              paging = TRUE  # Enable paging
+            ))
+}
+```
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+
+impossible_values = data.frame(participant = character(),column = character(), value = character(), stringsAsFactors = FALSE)
+for (g in Q) {
+setwd(pq)
+# Set working directory
+   if (file.exists(file.path(ppdata, paste0(g, ".xlsx")))) {   
+                  setwd(ppdata)
+            
+          } else if (file.exists(file.path(pq, paste0(g, ".xlsx")))) {
+            
+                # Check if the file exists in pq if not found in ppdata
+                  setwd(pq)
+          } else {
+            
+                stop(paste("Data for the questionnaire", Qb, "does not exist"))
+          }
+
+quest = read_excel(paste0(g, ".xlsx"))[-1, ]
+
+uniquescale = unique(quest$alternativescale)
+
+for (u in uniquescale) {
+if(is.na(u)){
+imp <- quest %>%
+  filter(is.na(open) & is.na(alternativescale)) %>%
+  distinct(Itemname) %>%
+  pull(Itemname)
+
+scale = quest[["levels"]]
+}else{
+imp <- quest %>%
+  filter(is.na(open) & alternativescale == u) %>%
+  distinct(Itemname) %>%
+  pull(Itemname)
+
+scale = quest[[paste0("levels",u)]]
+}
+  
+imp = imp[!is.na(imp)]
+scale = scale[!is.na(scale)]
+
+   
+impossible = select(output_complete, "participant_id", matches(imp))
+
+if(ncol(impossible)>1){
+# Initialize empty lists to store results
+participants <- c()
+columns <- c()
+value <- c()
+
+# Iterate through each row and column of the data frame
+for (i in 1:nrow(impossible)) {
+  for (j in 2:ncol(impossible)) { # Start from the second column assuming first column is participant_id
+    if (!(impossible[i, j] %in% scale) & !is.na(impossible[i, j])) {
+      participants <- append(participants, as.character(impossible[i, "participant_id"]))
+      columns <- c(columns, names(impossible)[j])
+      value <- c(value, as.character(impossible[i, j]))
+    }
+  }
+}}
+
+# Create a new data frame with the results
+result_df <- data.frame(participant = participants, column = columns, value = value)
+
+if(nrow(result_df)>0){impossible_values= rbind(impossible_values,result_df)}
+}
+
+}
+if(nrow(impossible_values)>0){   
+cat("## Impossible values:\n") 
+datatable(impossible_values, 
+            options = list(
+              searching = TRUE,  
+              paging = TRUE  
+            ))}
+```
+
+## Calculated Values
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+totalscores = output %>%
+  select(matches(c("sum","mean"))) %>%
+  colnames() %>%
+  as.data.frame()
+
+if(nrow(totalscores)>1){
+kable(totalscores, col.names = "Totalscores", booktabs = TRUE) %>% kable_styling(latex_options = "hold_position", font_size = 12)}
+```
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+subscores = output %>%
+  select(matches("subscale")) %>%
+  colnames() %>%
+  as.data.frame()
+
+if(nrow(subscores)>1){
+kable(subscores, col.names = "Subscalescores", booktabs = TRUE) %>% kable_styling(latex_options = "hold_position", font_size = 12)}
+
+if(nrow(subscores)<1&nrow(totalscores)<1){cat("No values were automatically calculated. \n")}
+```
+
+## Questionnaires
+
+```{r, results='asis',message = FALSE}
+#| echo: false
+for (k in Q) {
+# Set working directory
+   if (file.exists(file.path(ppdata, paste0(k, ".xlsx")))) {   
+                  setwd(ppdata)
+            
+          } else if (file.exists(file.path(pq, paste0(k, ".xlsx")))) {
+            
+                # Check if the file exists in pq if not found in ppdata
+                  setwd(pq)
+          } else {
+            
+                stop(paste("Data for the questionnaire", Qb, "does not exist"))
+          } 
+quest = read_excel(paste0(k, ".xlsx"))[-1, ]
+alt = unique(quest$alternativescale[!is.na(quest$alternativescale)])
+
+if(length(alt)>0){
+quest_table = select(quest,"Itemname":"alternativescale")
+quest_table = quest_table[!is.na(quest_table$Itemname), ]
+colnames(quest_table)[colnames(quest_table) == "alternativescale"] <- "scale"
+quest_table$scale[is.na(quest_table$scale) & is.na(quest_table$open)] <- 1
+quest_scale = select(quest,"levels":"leveldescription")
+quest_scale = quest_scale[!is.na(quest_scale$levels), ]
+if(!is.na(quest$description[1])){
+cat(paste0("### ",k,"\n"))
+cat("##### Description:\n") 
+cat(paste0(quest$description[1]),"\n")
+cat("\n")}
+if(!is.na(quest$instruction[1])){
+cat("##### Instruction:\n") 
+cat(paste0(quest$instruction[1]),"\n")}
+cat("\n")
+quest_table[is.na(quest_table)] <- ""
+cat(kable(quest_table, booktabs = TRUE) %>% kable_styling(latex_options = "hold_position", font_size = 12))
+cat('<small><em>Note:</em> inverted = inverted items are shown with "Yes", subscale = abbreviation of the subscale, opt = items that are not mandatory are shown with "Yes", open = items with no scales like open questions are shown with "Yes", unit = unit of the answer</small>\n')
+cat("\n")
+cat("##### Scale 1:\n")
+quest_scale[is.na(quest_scale)] <- ""
+cat(kable(quest_scale, booktabs = TRUE) %>% kable_styling(latex_options = "hold_position", font_size = 12))
+for (h in alt) {
+quest_scale = select(quest,paste0("levels",h):paste0("leveldescription",h))
+colnames(quest_scale)[colnames(quest_scale) == paste0("levels",h)] <- "levels"
+colnames(quest_scale)[colnames(quest_scale) == paste0("leveldescription",h)] <- "leveldescription"
+quest_scale = quest_scale[!is.na(quest_scale$levels), ]
+cat("\n")
+cat(paste0("##### Scale ", h, ":\n"))
+quest_scale[is.na(quest_scale)] <- ""
+cat(kable(quest_scale, booktabs = TRUE) %>% kable_styling(latex_options = "hold_position", font_size = 12))
+}
+
+}else{
+
+quest_table = select(quest,"Itemname":"unit")
+quest_table = quest_table[!is.na(quest_table$Itemname), ]
+quest_scale = select(quest,"levels":"leveldescription")
+quest_scale = quest_scale[!is.na(quest_scale$levels), ]
+
+cat(paste0("### ",k,"\n"))
+
+if(!is.na(quest$description[1])){
+cat("##### Description:\n") 
+cat(paste0(quest$description[1]),"\n")
+cat("\n")}
+if(!is.na(quest$instruction[1])){
+cat("##### Instruction:\n") 
+cat(paste0(quest$instruction[1]),"\n")}
+cat("\n")
+quest_table[is.na(quest_table)] <- ""
+cat(kable(quest_table, booktabs = TRUE) %>% kable_styling(latex_options = "hold_position", font_size = 12))
+cat('<small><em>Note:</em> inverted = inverted items are shown with "Yes", subscale = abbreviation of the subscale, opt = items that are not mandatory are shown with "Yes", open = items with no scales like open questions are shown with "Yes", unit = unit of the answer</small>\n')
+cat("\n")
+cat("##### Scale:\n")
+quest_scale[is.na(quest_scale)] <- ""
+cat(kable(quest_scale, booktabs = TRUE) %>% kable_styling(latex_options = "hold_position", font_size = 12))
+}}
+```
