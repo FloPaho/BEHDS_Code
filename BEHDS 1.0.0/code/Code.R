@@ -2,11 +2,17 @@
 {  # packages, directory & folder creation
 {
   # install packages if needed and open them in the library
-    {# Install and load tidyverse
-      if (!requireNamespace("tidyverse", quietly = TRUE)) {
-      install.packages("tidyverse")
+    {# Install and load packages
+      if (!requireNamespace("dplyr", quietly = TRUE)) {
+      install.packages("dplyr")
       }
-      library(tidyverse)
+      library(dplyr)
+      
+      if (!requireNamespace("readr", quietly = TRUE)) {
+        install.packages("readr")
+      }
+      library(readr)
+      
       
       if (!requireNamespace("knitr", quietly = TRUE)) {
         install.packages("knitr")
