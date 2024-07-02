@@ -30,7 +30,7 @@ proj <- params$proj
       library(kableExtra)
       library(readxl)
       library(readr)
-      library(tidyverse)
+      library(dplyr)
       library(DT)
 
 print(proj)
